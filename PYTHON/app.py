@@ -5,10 +5,31 @@ import csv
 import time
 from datetime import datetime
 import os
+import serial.tools.list_ports
 
-def get_serial_port():
-    port = input("Enter the serial port (e.g., COM3 or /dev/ttyACM0): ").strip()
-    return port
+def find_sensor_port(baudrate=9600, timeout=2):
+    ports = list(serial.tools.list_ports.comports())
+    for port in ports:
+        try:
+            ser = serial.Serial(port.device, baudrate, timeout=1)
+            found_o2 = False
+            found_co2 = False
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                line = ser.readline().decode('utf-8', errors='ignore').strip()
+                if line.startswith('O2:'):
+                    found_o2 = True
+                elif line.startswith('CO2:'):
+                    found_co2 = True
+                if found_o2 and found_co2:
+                    ser.close()
+                    print(f"Auto-selected port: {port.device}")
+                    return port.device
+            ser.close()
+        except Exception:
+            continue
+    print("No suitable serial port found with O2 and CO2 data.")
+    exit(1)
 
 def get_csv_filename():
     use_new = input("Create a new CSV file? (y/n): ").strip().lower()
@@ -21,9 +42,9 @@ def get_csv_filename():
         return "sensor_data.csv"
 
 def main():
-    SERIAL_PORT = get_serial_port()
-    CSV_FILE = get_csv_filename()
     BAUD_RATE = 9600  # Match this to your Arduino's Serial.begin() baud rate
+    SERIAL_PORT = find_sensor_port(baudrate=BAUD_RATE)
+    CSV_FILE = get_csv_filename()
 
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
     o2 = None
